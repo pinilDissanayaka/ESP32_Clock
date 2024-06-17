@@ -4,7 +4,6 @@
 #include "WiFiManager.h"
 #include <RTClib.h>
 
-
 // Which pin on the Arduino is connected to the NeoPixels?
 #define PIN        17
 #define display_CLK 18
@@ -15,7 +14,6 @@
 
 
 //========================USEFUL VARIABLES=============================
-int UTC = 2; // UTC = value in hour (SUMMER TIME) [For example: Paris UTC+2 => UTC=2]
 int Display_backlight = 2; // Adjust it 0 to 7
 int led_ring_brightness = 10; // Adjust it 0 to 255
 int led_ring_brightness_flash = 250; // Adjust it 0 to 255
@@ -23,7 +21,6 @@ int led_ring_brightness_flash = 250; // Adjust it 0 to 255
 // ========================================================================
 // ========================================================================
 
-const long utcOffsetInSeconds = 3600; // UTC + 1H / Offset in second
 
 // Adjust the color of the led ring
 #define red 00
@@ -35,9 +32,6 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 TM1637Display display(display_CLK, display_DIO);
 int flag = 0;
 
-// Define NTP Client to get time
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds*UTC);
 bool res;
 
 // Initialize RTC
@@ -47,18 +41,16 @@ void setup() {
   pinMode(25, OUTPUT);
   pinMode(26, OUTPUT);
 
+  display.setBrightness(Display_backlight);
+  pixels.begin(); // INITIALIZE NeoPixel pixels object
+  pixels.setBrightness(led_ring_brightness);
+
   Serial.begin(115200);
   Serial.println("\n Starting");
 
   setupWiFiManager();
 
-  timeClient.begin(); //delete
   setRTCTime():
-
-  display.setBrightness(Display_backlight);
-  pixels.begin(); // INITIALIZE NeoPixel pixels object
-  pixels.setBrightness(led_ring_brightness);
-  
 
   for(int i=0; i<NUMPIXELS;i++){
     pixels.setPixelColor(i, pixels.Color(red, green, blue));
@@ -71,46 +63,26 @@ void setup() {
 }
 
 void loop() {
-    // Update the time
-  timeClient.update();
-
-  Serial.print("Time: ");
-  Serial.println(timeClient.getFormattedTime());
-  unsigned long epochTime = timeClient.getEpochTime();
-  struct tm *ptm = gmtime ((time_t *)&epochTime); 
-  int currentYear = ptm->tm_year+1900;
-  Serial.print("Year: ");
-  Serial.println(currentYear);
   
-  int monthDay = ptm->tm_mday;
-  Serial.print("Month day: ");
-  Serial.println(monthDay);
-
-  int currentMonth = ptm->tm_mon+1;
-  Serial.print("Month: ");
-  Serial.println(currentMonth);
-
-  if((currentMonth*30 + monthDay) >= 121 && (currentMonth*30 + monthDay) < 331){
-  timeClient.setTimeOffset(utcOffsetInSeconds*UTC);} // Change daylight saving time - Summer
-  else {timeClient.setTimeOffset((utcOffsetInSeconds*UTC) - 3600);} // Change daylight saving time - Winter
-
   // switch on the ring in blue
   pixels.clear(); // Set all pixel colors to 'off'
   blue_light();
 
-  writeTime(); //write time on the display
+  DateTime now=getRTCTime()
+
+  writeTime(now.hour, now.minute); //write time on the display
 
   // switch on the blue leds
-  digitalWrite(25,1);
-  digitalWrite(26,1);
+  digitalWrite(25,HIGH);
+  digitalWrite(26,HIGH);
 
   // Animation every hour
-  if(timeClient.getMinutes()== 00 && flag==0)
+  if(now.minutes()== 00 && flag==0)
   {
     display_cuckoo();
     flag=1;
   }
-   if(timeClient.getMinutes()>=01)
+  if(now.minute>=02)
   {
     flag=0;
   }
@@ -163,6 +135,7 @@ void display_cuckoo(){
   {
     display.showNumberDecEx(i,0b01000000,true,2,0);
     display.showNumberDecEx(i,0b01000000,true,2,2);
+
   }
 
   display.showNumberDecEx(88,0b01000000,true,2,0);
@@ -172,10 +145,27 @@ void display_cuckoo(){
 
 }
 
-void writeTime(){
+void writeTime(int hour, int minute){
+
+  if (timeClient.getHours() == 0)
+  { 
+    hour = 12;
+  }
+  else if (hour == 12)
+  { 
+    hour = hour;
+    Serial.write(" =12");
+  }
+  else if (hour >= 13) {
+    hour = hour - 12;
+  }
+  else {
+    hour = hour;
+  }
+
   // write the time on the display
-  display.showNumberDecEx(timeClient.getHours(),0b01000000,true,2,0);
-  display.showNumberDecEx(timeClient.getMinutes(),0b01000000,true,2,2);
+  display.showNumberDecEx(hour,0b01000000,true,2,0);
+  display.showNumberDecEx(minute,0b01000000,true,2,2);
 }
 
 void setupWiFiManager(){
@@ -188,15 +178,32 @@ void setupWiFiManager(){
   res = manager.autoConnect("IRON_MAN_ARC","password");
   
   if(!res) {
+
     Serial.println("failed to connect and timeout occurred");
+
+    for(int i=0; i<NUMPIXELS;i++){
+      pixels.setPixelColor(i, pixels.Color(red, green, blue));
+      pixels.show();
+      delay(50);
+    }
     ESP.restart(); //reset and try again
   }
+  pixels.clear(); // Set all pixel colors to 'off'
 }
 
 void setRTCTime(){
+  int UTC = 2; // UTC = value in hour (SUMMER TIME) [For example: Paris UTC+2 => UTC=2]
+
+  const long utcOffsetInSeconds = 3600; // UTC + 1H / Offset in second
+
+  // Define NTP Client to get time
+  WiFiUDP ntpUDP;
+  NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds*UTC);
+  
   // Initialize RTC
   if (!rtc.begin()) {
     Serial.println("Couldn't find RTC");
+    red_light();
     while (1);
   }
 
@@ -216,6 +223,7 @@ void setRTCTime(){
 
   // Print current time to serial monitor
   printDateTime(now);
+  pixels.clear(); // Set all pixel colors to 'off'
 }
 
 // Function to print date and time
@@ -224,4 +232,15 @@ void printDateTime(DateTime dt) {
   sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d", dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
   Serial.println(buffer);
 }
+
+DateTime getRTCTime(){
+  DateTime now = rtc.now();
+
+  return now;
+}
+
+
+
+
+
 
