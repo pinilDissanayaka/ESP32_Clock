@@ -50,29 +50,20 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n Starting");
 
-  WiFiManager manager;   
+  setupWiFiManager();
 
-  //manager.resetSettings();
+  timeClient.begin(); //delete
+  setRTCTime():
 
-  manager.setTimeout(180);
-  //fetches ssid and password and tries to connect, if connections succeeds it starts an access point with the name called "IRON_MAN_ARC" and waits in a blocking loop for configuration
-  res = manager.autoConnect("IRON_MAN_ARC","password");
-  
-  if(!res) {
-  Serial.println("failed to connect and timeout occurred");
-  ESP.restart(); //reset and try again
-  }
-
-  timeClient.begin();
   display.setBrightness(Display_backlight);
   pixels.begin(); // INITIALIZE NeoPixel pixels object
   pixels.setBrightness(led_ring_brightness);
   
 
-  for(int i=0; i<35;i++){
-  pixels.setPixelColor(i, pixels.Color(red, green, blue));
-  pixels.show();
-  delay(50);
+  for(int i=0; i<NUMPIXELS;i++){
+    pixels.setPixelColor(i, pixels.Color(red, green, blue));
+    pixels.show();
+    delay(50);
   }
 
   flash_cuckoo();// white flash
@@ -186,3 +177,51 @@ void writeTime(){
   display.showNumberDecEx(timeClient.getHours(),0b01000000,true,2,0);
   display.showNumberDecEx(timeClient.getMinutes(),0b01000000,true,2,2);
 }
+
+void setupWiFiManager(){
+  WiFiManager manager;   
+
+  //manager.resetSettings();
+
+  manager.setTimeout(180);
+  //fetches ssid and password and tries to connect, if connections succeeds it starts an access point with the name called "IRON_MAN_ARC" and waits in a blocking loop for configuration
+  res = manager.autoConnect("IRON_MAN_ARC","password");
+  
+  if(!res) {
+    Serial.println("failed to connect and timeout occurred");
+    ESP.restart(); //reset and try again
+  }
+}
+
+void setRTCTime(){
+  // Initialize RTC
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
+
+  // Initialize NTP Client
+  timeClient.begin();
+
+  timeClient.update();
+
+  // Get NTP time
+  unsigned long epochTime = timeClient.getEpochTime();
+  DateTime now = DateTime(epochTime);
+
+  // Set RTC time
+  rtc.adjust(now);
+  
+  Serial.println("Time set successfully");
+
+  // Print current time to serial monitor
+  printDateTime(now);
+}
+
+// Function to print date and time
+void printDateTime(DateTime dt) {
+  char buffer[20];
+  sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d", dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
+  Serial.println(buffer);
+}
+
