@@ -35,14 +35,15 @@ int led_ring_brightness_flash = 250; // Adjust it 0 to 255
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 TM1637Display display(display_CLK, display_DIO);
 int flag = 0;
+int alarmFlag=0;
 
 // Initialize RTC
 RTC_DS3231 rtc;
 
 WebServer server(80);
 
-int onHour;
-int onMinute;
+int alarmHour;
+int alarmMinute;
 
 void setup() {
   pinMode(25, OUTPUT);
@@ -56,6 +57,8 @@ void setup() {
   Serial.println("\n Starting");
 
   setupWiFiManager();
+  //setSoftAP(); // setup access point for esp32
+
 
   setRTCTime();
 
@@ -68,7 +71,6 @@ void setup() {
   flash_cuckoo();// white flash
 
   rtc.begin();
-  //setSoftAP(); // setup access point for esp32
 
 }
 
@@ -95,6 +97,17 @@ void loop() {
   if(now.minute()>=02)
   {
     flag=0;
+  }
+
+  // Animation for alarm
+  if(now.hour()== alarmHour && now.hour()==alarmMinute && alarmFlag==0))
+  {
+    ringAlarm();
+    alarmFlag=1;
+  }
+  if(now.minute()>=02)
+  {
+    alarmFlag=0;
   }
 
 }
@@ -280,9 +293,9 @@ void handleRoot() {
                                             <h2>Set Relay Times</h2>
                                             <form action="/set" method="POST">
                                               ON Time (HH:MM):<br>
-                                              <input type="text" name="onHour"><br>
+                                              <input type="text" name="alarmHour"><br>
                                               OFF Time (HH:MM):<br>
-                                              <input type="text" name="onMinute"><br>
+                                              <input type="text" name="alarmMinute"><br>
                                               <input type="submit" value="Set Times">
                                             </form>
                                           </body>
@@ -293,8 +306,8 @@ void handleRoot() {
 }
 
 void handleSet() {
-  onHour = server.arg("onHour").toInt();
-  onMinute = server.arg("onMinute").toInt();
+  alarmHour = server.arg("alarmHour").toInt();
+  alarmMinute = server.arg("alarmMinute").toInt();
 
   char set_html[] PROGMEM = R"rawliteral(
                                           <!DOCTYPE html>
@@ -309,6 +322,23 @@ void handleSet() {
                                           )rawliteral";
 
   server.send(200, "text/html", set_html);
+}
+
+void ringAlarm(){
+  pixels.setBrightness(led_ring_brightness_flash);
+
+  for(int i=0; i<=NUMPIXELS; i++){
+    pixels.setPixelColor(i, pixels.Color(250,250,250));
+  }
+  pixels.show();
+
+  for (int i=led_ring_brightness_flash; i>10 ; i--){
+    pixels.setBrightness(i);
+    pixels.show();
+    delay(7);
+  }
+  blue_light();
+
 }
 
 
